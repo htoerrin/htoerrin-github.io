@@ -1,17 +1,99 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>360&deg; Image</title>
-    <meta name="description" content="360&deg; Image - A-Frame">
-    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
-  </head>
-  <body>
-    <a-scene>
-      <a-sky src="puydesancy.jpg" rotation="0 -130 0"></a-sky>
+<html lang="ja">
 
-      <a-text font="kelsonsans" value="Puy de Sancy, France" width="6" position="-2.5 0.25 -1.5"
-              rotation="0 15 0"></a-text>
-    </a-scene>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <!-- Open Ayame のスクリプトをインポートする -->
+    <script src="https://unpkg.com/@open-ayame/ayame-web-sdk/dist/ayame.min.js"></script>
+
+    <!-- Babylon.js のスクリプトをインポートする -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/4.0.3/babylon.js"></script>
+
+    <!-- CSS を適用して Babylon.js でのレンダリング内容を全画面表示になるようにする -->
+    <style>
+        html,
+        body {
+            overflow: hidden;
+            width: 100%;
+
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+    </style>
+</head>
+
+<body>
+    <video id="remoteVideo" style="display: none;"></video>
+    <!-- Babylon.js のレンダリング内容を表示するための Canvas タグ-->
+    <canvas id="renderCanvas"></canvas>
+    <script>
+        // Babylon.js が描画する内容を WebGL などの低レイヤーな層に
+        // 橋渡しするための Engine を描画対象の canvas エレメントで初期化する
+        const canvas = document.getElementById('renderCanvas');
+        const engine = new BABYLON.Engine(canvas, true);
+
+        // Engine で描画する Scene を作成する関数
+        const createScene = function () {
+            const scene = new BABYLON.Scene(engine);
+
+            // つねに原点を中心として回転するカメラを作成する
+            const camera = new BABYLON.ArcRotateCamera('Camera', 1, 1, 1, new BABYLON.Vector3(0, 0, 0), scene);
+
+            // カメラの視野角を 95 度に設定
+            const cameraFovRadian = 95 * (Math.PI / 180);
+            camera.fov = cameraFovRadian
+
+            // Camera の操作を canvas 上で可能にする
+            camera.attachControl(canvas, true);
+
+            // 描画する準備の整った Scene を返却する
+            return scene;
+        };
+
+        // 動画再生を行うための Scene を生成する
+        const scene = createScene();
+
+        // Open Ayame を利用して WebRTC で P2P 通信を行う
+        const conn = Ayame.connection('rtsp://10.0.0.124/stream', '');
+        window.onload = function () {
+            const startConn = async () => {
+                const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                await conn.connect(mediaStream);
+                conn.on('disconnect', (e) => console.log(e));
+
+                const remoteVideo = document.getElementById('remoteVideo');
+
+                // 通信相手から送られてくるカメラ映像を VideoDome で 360度表示する
+                conn.on('addstream', (e) => {
+                    document.querySelector('#remoteVideo').srcObject = e.stream;
+                    const videoDome = new BABYLON.VideoDome(
+                        'VideoDome',
+                        document.getElementById('remoteVideo'),
+                        { autoPlay: true },
+                        scene
+                    );
+                });
+            };
+            startConn();
+        }
+
+        // Scene をレンダリングループの中で描画する
+        engine.runRenderLoop(() => {
+            scene.render();
+        });
+
+        // ブラウザのリサイズ処理をした際に適切に描画内容がリサイズされるようにする
+        window.addEventListener('resize', function () {
+            engine.resize();
+        });
+    </script>
+</body>
+
 </html>
